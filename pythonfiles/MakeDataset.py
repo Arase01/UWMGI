@@ -9,6 +9,7 @@ import os
 import cv2
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from glob import glob
 from tqdm import tqdm
 
@@ -55,16 +56,17 @@ for day, group in tqdm(df.groupby("days")): #144 scans per day -> imgs,msks
             else:
                 masks[label] = np.zeros((segms.size_x.iloc[0], segms.size_y.iloc[0]), dtype = np.uint8)
         masks = np.stack([masks[k] for k in sorted(masks)], -1)
-        imgs.append(img)
-        msks.append(masks)
+        imgs.append(img) #(1,266,266)
+        msks.append(masks) #(1,266,266,3)
         
     imgs = np.stack(imgs, 0) #(144,266,266) ...fluctuate xy size
     msks = np.stack(msks, 0) #(144,266,266,3) ...fluctuate xy size
     
     for i in range(msks.shape[0]):
-        img = imgs[[max(0, i - 2), i, min(imgs.shape[0] - 1, i + 2)]].transpose(1,2,0)           
+        #img = imgs[[max(0, i - 2), i, min(imgs.shape[0] - 1, i + 2)]].transpose(1,2,0)     
+        img = imgs[i]
         msk = msks[i]
         
         new_file_name = f"{day}_{i}.png"
-        cv2.imwrite(f"../input/seg_train/images/{new_file_name}", img)
+        cv2.imwrite(f"../input/seg_train/test/{new_file_name}", img)
         cv2.imwrite(f"../input/seg_train/masks/{new_file_name}", msk)
