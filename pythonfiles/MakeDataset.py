@@ -40,19 +40,31 @@ def rle_decode(mask_rle, shape):
         img[lo : hi] = 1
     return img.reshape(shape)
 
-for day, group in tqdm(df.groupby("days")):
+
+for day, group in tqdm(df.groupby("days")): #144 scans per day -> imgs,msks
     patient = group.patient.iloc[0]
     imgs,msks,file_names = [],[],[]
-    for file_name in group.image_files.unique():
-        img = cv2.imread(file_name, cv2.IMREAD_ANYDEPTH)
-        segms = group.loc[group.image_files == file_name] #insert "stomach" "large_bowel" "small_bowel"
-        masks = {}
-        for segm, label in zip(segms.segmentation, segms['class']):
+    for file_name in group.image_files.unique(): #1group -> "stomach" "large_bowel" "small_bowel"(3labels)
+        img = cv2.imread(file_name, cv2.IMREAD_ANYDEPTH) #(266,266) ...fluctuate xy size but almost size is it
+        segms = group.loc[group.image_files == file_name] 
+        masks = {} #3label mask
+        for segm, label in zip(segms.segmentation, segms['class']): #1lebel + 1segm -> 1mask
             if not pd.isna(segm):
-                mask = rle_decode(segm,[segms.size_x[0], segms.size_y[0]])
+                mask = rle_decode(segm,[segms.size_x.iloc[0], segms.size_y.iloc[0]])
                 masks[label] = mask
             else:
-                print(segms.size_x[0])
-                masks[label] = np.zeros((segms.size_x[0], segms.size_y[0]), dtype = np.uint8)
-           
-            
+                masks[label] = np.zeros((segms.size_x.iloc[0], segms.size_y.iloc[0]), dtype = np.uint8)
+        masks = np.stack([masks[k] for k in sorted(masks)], -1)
+        imgs.append(img)
+        msks.append(masks)
+        
+    imgs = np.stack(imgs, 0) #(144,266,266) ...fluctuate xy size
+    msks = np.stack(msks, 0) #(144,266,266,3) ...fluctuate xy size
+    
+    for i in range(msks.shape[0]):
+        img = imgs[[max(0, i - 2), i, min(imgs.shape[0] - 1, i + 2)]].transpose(1,2,0)           
+        msk = msks[i]
+        
+        new_file_name = f"{day}_{i}.png"
+        cv2.imwrite(f"../input/seg_train/images/{new_file_name}", img)
+        cv2.imwrite(f"../input/seg_train/masks/{new_file_name}", msk)

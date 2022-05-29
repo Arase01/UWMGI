@@ -33,6 +33,16 @@ def mask_from_segmentation(segmentation, shape):
     
     return case_mask
 
+def rle_decode(mask_rle, shape):
+    s = np.array(mask_rle.split(), dtype=int)
+    starts, lengths = s[0::2] - 1, s[1::2] 
+    ends = starts + lengths
+    h, w = shape
+    img = np.zeros((h * w,), dtype = np.uint8) #flatten
+    for lo, hi in zip(starts, ends): #start-1 + length = end (length include start)
+        img[lo : hi] = 1
+    return img.reshape(shape)
+
 # Example
 segmentation = '45601 5 45959 10 46319 12 46678 14 47037 16 47396 18 47756 18 48116 19 48477 18 48837 19 \
                 49198 19 49558 19 49919 19 50279 20 50639 20 50999 21 51359 21 51719 22 52079 22 52440 22 52800 22 53161 21 \
@@ -42,7 +52,7 @@ segmentation = '45601 5 45959 10 46319 12 46678 14 47037 16 47396 18 47756 18 48
 
 shape = (310, 360)
 
-case_mask = mask_from_segmentation(segmentation, shape)
+case_mask = rle_decode(segmentation, shape)
 
 plt.figure(figsize=(5, 5))
 plt.title("Mask Example:")
