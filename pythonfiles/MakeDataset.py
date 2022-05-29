@@ -45,7 +45,7 @@ for day, group in tqdm(df.groupby("days")): #144 scans per day -> imgs,msks
     patient = group.patient.iloc[0]
     imgs,msks,file_names = [],[],[]
     for file_name in group.image_files.unique(): #1group -> "stomach" "large_bowel" "small_bowel"(3labels)
-        img = cv2.imread(file_name, cv2.IMREAD_ANYDEPTH) #(266,266) ...fluctuate xy size but almost size is it
+        img = cv2.imread(file_name, cv2.IMREAD_ANYDEPTH) #(266,266) ...fluctuate xy size but size are mostly it
         segms = group.loc[group.image_files == file_name] 
         masks = {} #3label mask
         for segm, label in zip(segms.segmentation, segms['class']): #1lebel + 1segm -> 1mask
