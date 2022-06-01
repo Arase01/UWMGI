@@ -7,9 +7,11 @@ Created on Sun May 29 12:16:14 2022
 
 import os
 import cv2
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 from glob import glob
 from tqdm import tqdm
 
@@ -63,10 +65,9 @@ for day, group in tqdm(df.groupby("days")): #144 scans per day -> imgs,msks
     msks = np.stack(msks, 0) #(144,266,266,3) ...fluctuate xy size
     
     for i in range(msks.shape[0]):
-        #img = imgs[[max(0, i - 2), i, min(imgs.shape[0] - 1, i + 2)]].transpose(1,2,0)     
-        img = imgs[i]
+        img = imgs[[max(0, i - 2), i, min(imgs.shape[0] - 1, i + 2)]].transpose(1,2,0)    
         msk = msks[i]
-        
+
         new_file_name = f"{day}_{i}.png"
-        cv2.imwrite(f"../input/seg_train/test/{new_file_name}", img)
+        cv2.imwrite(f"../input/seg_train/images/{new_file_name}", img)
         cv2.imwrite(f"../input/seg_train/masks/{new_file_name}", msk)
