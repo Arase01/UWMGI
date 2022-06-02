@@ -5,7 +5,14 @@ Created on Sun May 29 18:01:42 2022
 @author: kaito
 """
 
+# PyTorch 
 import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.optim import lr_scheduler
+from torch.utils.data import Dataset, DataLoader
+from torch.cuda import amp
+
 import segmentation_models_pytorch as smp
 
 class CFG:
@@ -49,3 +56,6 @@ def load_model(path):
     model.load_state_dict(torch.load(path))
     model.eval()
     return model
+
+a,b = 1,2
+criterion(a,b)
