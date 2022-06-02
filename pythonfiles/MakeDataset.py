@@ -20,7 +20,12 @@ df = df.sort_values(["id", "class"]).reset_index(drop = True) #id:case_day_slice
 df["patient"] = df.id.apply(lambda x: x.split("_")[0]) # case
 df["days"] = df.id.apply(lambda x: "_".join(x.split("_")[:2])) #day
 
-all_image_files = sorted(glob('../input/train/*/*/scans/*.png'),key = lambda x: x.split("/")[1] + "_" + x.split("/")[2])
+x = glob('../input/train/*/*/scans/*.png')
+x = x[0].split("/")[1] + "_" + x[0].split("/")[2]
+print(x)
+sys.exit()
+
+all_image_files = sorted(glob('../input/train/*/*/scans/*.png'),key = lambda x: x.split("/")[1] + x.split("/")[2])
 #slice[0]_slicenum[1]_sizex[2]_sizey[3]_spacingx[4]_spacingy[5]        ex.slice_0001_266_266_1.50_1.50
 size_x = [int(os.path.basename(_)[:-4].split("_")[-4]) for _ in all_image_files] #[:-4] -> remove ".png"
 size_y = [int(os.path.basename(_)[:-4].split("_")[-3]) for _ in all_image_files]
@@ -45,7 +50,6 @@ def rle_decode(mask_rle, shape):
 
 
 for day, group in tqdm(df.groupby("days")): #144 scans per day -> imgs,msks
-    patient = group.patient.iloc[0]
     imgs,msks,file_names = [],[],[]
     for file_name in group.image_files.unique(): #1group -> "stomach" "large_bowel" "small_bowel"(3labels)
         img = cv2.imread(file_name, cv2.IMREAD_ANYDEPTH) #(266,266) ...fluctuate xy size but size are mostly it
