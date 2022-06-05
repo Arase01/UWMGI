@@ -20,10 +20,6 @@ df = df.sort_values(["id", "class"]).reset_index(drop = True) #id:case_day_slice
 df["patient"] = df.id.apply(lambda x: x.split("_")[0]) # case
 df["days"] = df.id.apply(lambda x: "_".join(x.split("_")[:2])) #day
 
-x = glob('../input/train/*/*/scans/*.png')
-x = x[0].split("/")[1] + "_" + x[0].split("/")[2]
-print(x)
-sys.exit()
 
 all_image_files = sorted(glob('../input/train/*/*/scans/*.png'),key = lambda x: x.split("/")[1] + x.split("/")[2])
 #slice[0]_slicenum[1]_sizex[2]_sizey[3]_spacingx[4]_spacingy[5]        ex.slice_0001_266_266_1.50_1.50
@@ -71,7 +67,7 @@ for day, group in tqdm(df.groupby("days")): #144 scans per day -> imgs,msks
     for i in range(msks.shape[0]):
         img = imgs[[max(0, i - 2), i, min(imgs.shape[0] - 1, i + 2)]].transpose(1,2,0)    
         msk = msks[i]
-
-        new_file_name = f"{day}_{i}.png"
+        
+        new_file_name = f"{day}_slice_{str(i+1).zfill(4)}.png"
         cv2.imwrite(f"../input/seg_train/images/{new_file_name}", img)
         cv2.imwrite(f"../input/seg_train/masks/{new_file_name}", msk)
