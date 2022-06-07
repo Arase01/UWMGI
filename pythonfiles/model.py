@@ -66,7 +66,7 @@ class CFG:
 def rand_nodup(upper, lower, rand_len):
     rand_list = []
     while len(rand_list) < rand_len:
-        n = random.randint(upper, lower)
+        n = random.randint(lower, upper)
         if not n in rand_list:
             rand_list.append(n)
     return rand_list
@@ -290,14 +290,13 @@ def main():
     df['empty'].value_counts().plot.bar()
     
     if CFG.debug:
-        print(len(df['id']))
-        delete_idx = rand_nodup(len(df['id']), 0, CFG.debug_late*len(df['id']))
+        debug_len = len(df['id']) - (CFG.debug_late*len(df['id']))
+        delete_idx = rand_nodup(len(df['id'])-1, 0, debug_len)
         for delete in delete_idx:
-            df.drop(index=delete, axis=0)
+            df = df.drop(index=delete)
         df.reset_index()
-        print(len(df['id']))
+        print("#################DEBUG MODE#################")
     
-    sys.exit()
     skf = StratifiedGroupKFold(n_splits=CFG.n_fold, shuffle=True, random_state=CFG.seed)
     for fold, (train_idx, val_idx) in enumerate(skf.split(df, df['empty'], groups = df["case"])):
         df.loc[val_idx, 'fold'] = fold  
