@@ -8,12 +8,40 @@ Created on Sun May 29 12:16:14 2022
 import os
 import cv2
 import sys
+import shutil
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from glob import glob
 from tqdm import tqdm
+
+def rle_decode(mask_rle, shape):
+    s = np.array(mask_rle.split(), dtype=int)
+    starts, lengths = s[0::2] - 1, s[1::2] 
+    ends = starts + lengths
+    h, w = shape
+    img = np.zeros((h * w,), dtype = np.uint8) #flatten
+    for lo, hi in zip(starts, ends): #start-1 + length = end (length include start)
+        img[lo : hi] = 1
+    return img.reshape(shape)
+
+def pathcheck(path):
+    if os.path.isdir == True:
+        if os.path.exists(path) == True:      
+            print('Reset Directory: {}'.format(path))
+            shutil.rmtree(path)
+            os.makedirs(path)
+        else:
+            os.makedirs(path)
+    else :
+        if os.path.exists(path) == True:
+            print('Reset File: {}'.format(path))
+            os.remove(path)
+        else: pass
+
+pathcheck('../input/seg_train/images')
+pathcheck('../input/seg_train/masks')
 
 df = pd.read_csv("../input/train.csv") #read train data
 df = df.sort_values(["id", "class"]).reset_index(drop = True) #id:case_day_slice
@@ -33,16 +61,6 @@ df["spacing_y"] = np.repeat(spacing_y, 3)
 df["size_x"] = np.repeat(size_x, 3)
 df["size_y"] = np.repeat(size_y, 3)
 df["slice"] = np.repeat([int(os.path.basename(_)[:-4].split("_")[-5]) for _ in all_image_files], 3) #slice
-
-def rle_decode(mask_rle, shape):
-    s = np.array(mask_rle.split(), dtype=int)
-    starts, lengths = s[0::2] - 1, s[1::2] 
-    ends = starts + lengths
-    h, w = shape
-    img = np.zeros((h * w,), dtype = np.uint8) #flatten
-    for lo, hi in zip(starts, ends): #start-1 + length = end (length include start)
-        img[lo : hi] = 1
-    return img.reshape(shape)
 
 
 for day, group in tqdm(df.groupby("days")): #144 scans per day -> imgs,msks

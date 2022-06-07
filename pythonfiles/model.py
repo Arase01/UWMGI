@@ -8,16 +8,18 @@ Created on Sun May 29 18:01:42 2022
 import os
 import gc
 import sys
-import tqdm
 import time
 import copy
+import random
 
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 from glob import glob
 from IPython.core.display import display
 from natsort import natsorted
 from collections import defaultdict
+import matplotlib.pyplot as plt
 
 # PyTorch 
 import torch
@@ -33,19 +35,41 @@ from sklearn.model_selection import StratifiedKFold, KFold, StratifiedGroupKFold
 
 from Make_Dataset import BuildDataset, prepare_loaders
 
+from colorama import Fore,Style
+
+c_  = Fore.GREEN
+sr_ = Style.RESET_ALL
+
 pd.set_option('display.max_columns', 10)
 pd.set_option('display.max_rows', 50000)
 
 class CFG:
+    debug         = True # set debug=False for Full Training
+    debug_late    = 0.2  # use debug_late * allImage
     seed          = 101
     comment       = 'unet-efficientnet_b0-320x384'
     model_name    = 'Unet'
     backbone      = 'efficientnet-b0'
+    num_classes   = 3
     epochs        = 50
     lr            = 2e-3
     min_lr        = 1e-6
     wd            = 1e-6
-    n_fold        = 5  
+    n_fold        = 5
+    train_bs      = 64
+    valid_bs      = train_bs * 2
+    n_accumulate  = max(1, 32//train_bs)
+    T_max         = int(30000/train_bs*epochs)+50
+    T_0           = 25
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+def rand_nodup(upper, lower, rand_len):
+    rand_list = []
+    while len(rand_list) < rand_len:
+        n = random.randint(upper, lower)
+        if not n in rand_list:
+            rand_list.append(n)
+    return rand_list
 
 #------------Model------------
 def build_model():
@@ -57,6 +81,12 @@ def build_model():
         activation=None,
     )
     model.to(CFG.device)
+    return model
+
+def load_model(path):
+    model = build_model()
+    model.load_state_dict(torch.load(path))
+    model.eval()
     return model
 
 #------------Loss Function------------
@@ -133,7 +163,7 @@ def train_one_epoch(model, optimizer, scheduler, dataloader, device, epoch):
     return epoch_loss
 
 @torch.no_grad()
-def valid_one_epoch(model, dataloader, device, epoch):
+def valid_one_epoch(model, optimizer, dataloader, device, epoch):
     model.eval()
     
     dataset_size = 0
@@ -172,7 +202,7 @@ def valid_one_epoch(model, dataloader, device, epoch):
     
     return epoch_loss, val_scores
 
-def run_training(model, optimizer, scheduler, device, num_epochs):
+def run_training(model, optimizer, scheduler, device, num_epochs, train_loader, valid_loader, fold):
     
     if torch.cuda.is_available():
         print("cuda: {}\n".format(torch.cuda.get_device_name()))
@@ -190,9 +220,9 @@ def run_training(model, optimizer, scheduler, device, num_epochs):
                                            dataloader=train_loader, 
                                            device=CFG.device, epoch=epoch)
         
-        val_loss, val_scores = valid_one_epoch(model, valid_loader, 
-                                                 device=CFG.device, 
-                                                 epoch=epoch)
+        val_loss, val_scores = valid_one_epoch(model, optimizer, 
+                                               dataloader=valid_loader, 
+                                               device=CFG.device, epoch=epoch)
         val_dice, val_jaccard = val_scores
     
         history['Train Loss'].append(train_loss)
@@ -208,9 +238,9 @@ def run_training(model, optimizer, scheduler, device, num_epochs):
             best_dice    = val_dice
             best_jaccard = val_jaccard
             best_epoch   = epoch
-            run.summary["Best Dice"]    = best_dice
-            run.summary["Best Jaccard"] = best_jaccard
-            run.summary["Best Epoch"]   = best_epoch
+            run_summary["Best Dice"] = best_dice
+            run_summary["Best Jaccard"] = best_jaccard
+            run_summary["Best Epoch"] = best_epoch
             best_model_wts = copy.deepcopy(model.state_dict())
             PATH = f"best_epoch-{fold:02d}.bin"
             torch.save(model.state_dict(), PATH)
@@ -234,50 +264,70 @@ def run_training(model, optimizer, scheduler, device, num_epochs):
     
     return model, history
 
-df = pd.DataFrame(natsorted(glob('../input/seg_train/images/*')), columns=['image_path'])
-df['mask_path'] = df.image_path.str.replace('image','mask')
-df['id'] = df.image_path.map(lambda x: x.split('/')[-1].replace('.png','').replace('images\\',''))
-df['case'] =  df.id.map(lambda x: x.split('_')[0].replace('case',''))
 
-df2 = pd.read_csv('../input/train.csv')
-df2 = df2.sort_values('id').reset_index(drop=True)
-df2['segmentation'] = df2.segmentation.fillna('')
-df2['rle_len'] = df2.segmentation.map(len)
-
-df3 = df2.groupby(['id'])['segmentation'].agg(list).to_frame().reset_index() # rle list of each id
-df3 = df3.merge(df2.groupby(['id'])['rle_len'].agg(sum).to_frame().reset_index()) # total length of all rles of each id
-
-df2 = df2.drop(columns=['segmentation', 'class', 'rle_len'])
-df2 = df2.groupby(['id']).head(1).reset_index(drop=True)
-df2 = df2.merge(df3, on=['id'])
-df2['empty'] = (df2.rle_len==0)
-#df2['empty'].value_counts().plot.bar()
-
-df['rle_len'] = df2['rle_len']
-df['empty'] = df2['empty']
-df['empty'].value_counts().plot.bar()
-
-skf = StratifiedGroupKFold(n_splits=CFG.n_fold, shuffle=True, random_state=CFG.seed)
-for fold, (train_idx, val_idx) in enumerate(skf.split(df, df['empty'], groups = df["case"])):
-    df.loc[val_idx, 'fold'] = fold  
-display(df.groupby(['fold','empty'])['id'].count())
-
-
-for fold in CFG.folds:
-    train_loader, valid_loader = prepare_loaders(df, fold)
-    model = build_model()
-    optimizer = optim.Adam(model.parameters(), lr=CFG.lr, weight_decay=CFG.wd)
-    scheduler = lr_scheduler.CosineAnnealingLR(optimizer,T_max=CFG.T_max, eta_min=CFG.min_lr)
-    model, history = run_training(model, optimizer, scheduler,
-                                  device=CFG.device,
-                                  num_epochs=CFG.epochs)
-    run.finish()
-
-
-
-
-
-
-
-
-
+def main():
+    df = pd.DataFrame(natsorted(glob('../input/seg_train/images/*')), columns=['image_path'])
+    df['mask_path'] = df.image_path.str.replace('image','mask')
+    df['id'] = df.image_path.map(lambda x: x.split('/')[-1].replace('.png','').replace('images\\',''))
+    df['case'] =  df.id.map(lambda x: x.split('_')[0].replace('case',''))
+    
+    df2 = pd.read_csv('../input/train.csv')
+    df2 = df2.sort_values('id').reset_index(drop=True)
+    df2['segmentation'] = df2.segmentation.fillna('')
+    df2['rle_len'] = df2.segmentation.map(len)
+    
+    df3 = df2.groupby(['id'])['segmentation'].agg(list).to_frame().reset_index() # rle list of each id
+    df3 = df3.merge(df2.groupby(['id'])['rle_len'].agg(sum).to_frame().reset_index()) # total length of all rles of each id
+    
+    df2 = df2.drop(columns=['segmentation', 'class', 'rle_len'])
+    df2 = df2.groupby(['id']).head(1).reset_index(drop=True)
+    df2 = df2.merge(df3, on=['id'])
+    df2['empty'] = (df2.rle_len==0)
+    #df2['empty'].value_counts().plot.bar()
+    
+    df['rle_len'] = df2['rle_len']
+    df['empty'] = df2['empty']
+    df['empty'].value_counts().plot.bar()
+    
+    if CFG.debug:
+        print(len(df['id']))
+        delete_idx = rand_nodup(len(df['id']), 0, CFG.debug_late*len(df['id']))
+        for delete in delete_idx:
+            df.drop(index=delete, axis=0)
+        df.reset_index()
+        print(len(df['id']))
+    
+    sys.exit()
+    skf = StratifiedGroupKFold(n_splits=CFG.n_fold, shuffle=True, random_state=CFG.seed)
+    for fold, (train_idx, val_idx) in enumerate(skf.split(df, df['empty'], groups = df["case"])):
+        df.loc[val_idx, 'fold'] = fold  
+    display(df.groupby(['fold','empty'])['id'].count())
+    
+    global run_summary
+    run_summary = defaultdict(list)
+    
+    for fold in range(CFG.n_fold):
+        train_loader, valid_loader = prepare_loaders(df, fold, CFG.train_bs, CFG.valid_bs)
+        model = build_model()
+        optimizer = optim.Adam(model.parameters(), lr=CFG.lr, weight_decay=CFG.wd)
+        scheduler = lr_scheduler.CosineAnnealingLR(optimizer,T_max=CFG.T_max, eta_min=CFG.min_lr)
+        model, history = run_training(model, optimizer, scheduler,
+                                      device=CFG.device,
+                                      num_epochs=CFG.epochs,
+                                      train_loader=train_loader,
+                                      valid_loader=valid_loader,
+                                      fold=fold)
+        
+        fig, axs = plt.subplots(2,3,figsize=(12,8))
+        for f, ax in zip(history, axs.ravel()):
+            ax.set_xlabel(f)
+            ax.plot(history[f])
+        savepath = "output/learn" + str(fold) + ".png"
+        plt.savefig(savepath)
+    
+    print(run_summary)
+        
+if __name__ == '__main__':
+    main()
+    
+    

@@ -7,9 +7,12 @@ import torchvision.transforms as transforms
 
 
 class BuildDataset(Dataset):
-    def __init__(self, image_paths, mask_paths, size=(256, 256), label=True, transforms=None):
-        self.img_paths  = sorted(glob(f'{image_paths}/*.png'), key = lambda x: x.split('\\')[1].split('_')[1])
-        self.mask_paths = sorted(glob(f'{mask_paths}/*.png'), key = lambda x: x.split('\\')[1].split('_')[1])
+    def __init__(self, df, size=(256, 256), label=True, transforms=None):
+        #self.img_paths  = sorted(glob(f'{image_paths}/*.png'), key = lambda x: x.split('\\')[1].split('_')[1])
+        #self.img_masks  = sorted(glob(f'{mask_paths}/*.png'), key = lambda x: x.split('\\')[1].split('_')[1])
+        self.df = df
+        self.img_paths  = df['image_path']
+        self.mask_paths  = df['mask_path']
         self.size = size
         self.label = label
         
@@ -40,17 +43,15 @@ class BuildDataset(Dataset):
             img = np.transpose(img, (2, 0, 1))
             return torch.tensor(img)
 
-def prepare_loaders(df,current_fold):
-    train_img = df.query("fold!=current_fold")['image_path'].reset_index(drop=True)
-    valid_img= df.query("fold==current_fold")['image_path'].reset_index(drop=True)
-    train_mask = df.query("fold!=current_fold")['mask_path'].reset_index(drop=True)
-    valid_mask = df.query("fold==current_fold")['mask_path'].reset_index(drop=True)
+def prepare_loaders(df, current_fold, train_bs, valid_bs):
+    train_df = df.query("fold!=@current_fold").reset_index(drop=True)
+    valid_df = df.query("fold==@current_fold").reset_index(drop=True)
     
-    train_dataset = BuildDataset(train_img, train_mask)
-    valid_dataset = BuildDataset(valid_img, valid_mask)
+    train_dataset = BuildDataset(train_df)
+    valid_dataset = BuildDataset(valid_df)
     
-    train_loader = DataLoader(train_dataset, batch_size=128, pin_memory=True,shuffle=True, num_workers=4)
-    valid_loader = DataLoader(valid_dataset, batch_size=128, pin_memory=True,shuffle=False, num_workers=4)
+    train_loader = DataLoader(train_dataset, batch_size=train_bs, pin_memory=True,shuffle=True, num_workers=4)
+    valid_loader = DataLoader(valid_dataset, batch_size=valid_bs, pin_memory=True,shuffle=False, num_workers=4)
     
     return train_loader, valid_loader
 
