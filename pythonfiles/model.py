@@ -51,7 +51,7 @@ class CFG:
     model_name    = 'Unet'
     backbone      = 'efficientnet-b0'
     num_classes   = 3
-    epochs        = 50
+    epochs        = 5
     lr            = 2e-3
     min_lr        = 1e-6
     wd            = 1e-6
@@ -129,7 +129,8 @@ def train_one_epoch(model, optimizer, scheduler, dataloader, device, epoch):
         masks  = masks.to(device, dtype=torch.float)
         
         batch_size = images.size(0)
-        
+        schelr = scheduler.get_lr()
+        print(schelr)
         with amp.autocast(enabled=True):
             y_pred = model(images)
             loss   = criterion(y_pred, masks)
@@ -156,6 +157,7 @@ def train_one_epoch(model, optimizer, scheduler, dataloader, device, epoch):
         current_lr = optimizer.param_groups[0]['lr']
         pbar.set_postfix(train_loss=f'{epoch_loss:0.4f}',
                         lr=f'{current_lr:0.5f}',
+                        #schelr = f'{schelr:0.5f}',
                         gpu_mem=f'{mem:0.2f} GB')
         torch.cuda.empty_cache()
         gc.collect()
@@ -238,17 +240,14 @@ def run_training(model, optimizer, scheduler, device, num_epochs, train_loader, 
             best_dice    = val_dice
             best_jaccard = val_jaccard
             best_epoch   = epoch
-            run_summary["Best Dice"] = best_dice
-            run_summary["Best Jaccard"] = best_jaccard
-            run_summary["Best Epoch"] = best_epoch
             best_model_wts = copy.deepcopy(model.state_dict())
-            PATH = f"best_epoch-{fold:02d}.bin"
+            PATH = f"../output/best_epoch-{fold:02d}.pth"
             torch.save(model.state_dict(), PATH)
 
             print(f"Model Saved{sr_}")
             
         last_model_wts = copy.deepcopy(model.state_dict())
-        PATH = f"last_epoch-{fold:02d}.bin"
+        PATH = f"../output/last_epoch-{fold:02d}.pth"
         torch.save(model.state_dict(), PATH)
             
         print(); print()
@@ -257,7 +256,8 @@ def run_training(model, optimizer, scheduler, device, num_epochs, train_loader, 
     time_elapsed = end - start
     print('Training complete in {:.0f}h {:.0f}m {:.0f}s'.format(
         time_elapsed // 3600, (time_elapsed % 3600) // 60, (time_elapsed % 3600) % 60))
-    print("Best Score: {:.4f}".format(best_jaccard))
+    print("Best Dice: {:.4f}     Best Jaccard: {:.4f}     Best Epoch: {:.4f}"
+          .format(best_dice,best_jaccard,best_epoch))
     
     # load best model weights
     model.load_state_dict(best_model_wts)
@@ -294,7 +294,7 @@ def main():
         delete_idx = rand_nodup(len(df['id'])-1, 0, debug_len)
         for delete in delete_idx:
             df = df.drop(index=delete)
-        df.reset_index()
+        df = df.reset_index()
         print("#################DEBUG MODE#################")
     
     skf = StratifiedGroupKFold(n_splits=CFG.n_fold, shuffle=True, random_state=CFG.seed)
@@ -302,15 +302,16 @@ def main():
         df.loc[val_idx, 'fold'] = fold  
     display(df.groupby(['fold','empty'])['id'].count())
     
-    global run_summary
-    run_summary = defaultdict(list)
     
     for fold in range(CFG.n_fold):
+        print('#'*15)
+        print(f'### Fold: {fold}')
+        print('#'*15)
         train_loader, valid_loader = prepare_loaders(df, fold, CFG.train_bs, CFG.valid_bs)
         model = build_model()
         optimizer = optim.Adam(model.parameters(), lr=CFG.lr, weight_decay=CFG.wd)
         scheduler = lr_scheduler.CosineAnnealingLR(optimizer,T_max=CFG.T_max, eta_min=CFG.min_lr)
-        model, history = run_training(model, optimizer, scheduler,
+        model, history = run_training(model, optimizer, scheduler, #return best model and history
                                       device=CFG.device,
                                       num_epochs=CFG.epochs,
                                       train_loader=train_loader,
@@ -321,10 +322,8 @@ def main():
         for f, ax in zip(history, axs.ravel()):
             ax.set_xlabel(f)
             ax.plot(history[f])
-        savepath = "output/learn" + str(fold) + ".png"
+        savepath = "../output/learn" + str(fold) + ".png"
         plt.savefig(savepath)
-    
-    print(run_summary)
         
 if __name__ == '__main__':
     main()
