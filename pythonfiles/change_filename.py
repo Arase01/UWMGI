@@ -38,7 +38,7 @@ def load_img(path, size=IMG_SIZE):
         pad1 = diff[1]
         pady = [pad0//2, pad0//2 + pad0%2]
         padx = [pad1//2, pad1//2 + pad1%2]
-        img = np.pad(img, [pady, padx])
+        img = np.pad(img, [pady, padx],mode='constant')
         img = img.reshape(*resize)
         
 #     img = np.tile(img[...,None], [1, 1, 3]) # gray to rgb
