@@ -16,7 +16,7 @@ from matplotlib.patches import Rectangle
 from glob import glob
 from tqdm import tqdm
 
-IMG_SIZE = (310,360)
+IMG_SIZE = (320,384)
 
 def rle_decode(mask_rle, shape):
     s = np.array(mask_rle.split(), dtype=int)
@@ -48,6 +48,20 @@ def load_img(path, size=IMG_SIZE):
 #         img/=mx # scale image to [0, 1]
     return img
 
+def change_shape_msk(msks, size=IMG_SIZE):
+    msk = np.stack([msks[k] for k in msks], -1)
+    shape0 = np.array(msk.shape[:2])
+    resize = np.array(size)
+    if np.any(shape0!=resize):
+        diff = resize - shape0
+        pad0 = diff[0]
+        pad1 = diff[1]
+        pady = [pad0//2, pad0//2 + pad0%2]
+        padx = [pad1//2, pad1//2 + pad1%2]
+        msk = np.pad(msk, [pady, padx, [0,0]], mode='constant')
+        msk = msk.reshape(*resize, 3)
+    return msk
+
 def pathcheck(path):
     if os.path.exists(path) == True:
         if os.path.isfile(path) == True :
@@ -57,7 +71,7 @@ def pathcheck(path):
             print('Reset Directory: {}'.format(path))
             shutil.rmtree(path)
             os.makedirs(path)
-    elif len(path.split('.')) == 1:
+    elif len(path.split('.')) == 1 or len(path.split('.')) == 3:
         os.makedirs(path)
     else: print("no reset")
     
@@ -84,34 +98,39 @@ df["size_x"] = np.repeat(size_x, 3)
 df["size_y"] = np.repeat(size_y, 3)
 df["slice"] = np.repeat([int(os.path.basename(_)[:-4].split("_")[-5]) for _ in all_image_files], 3) #slice
 
-
-for day, group in tqdm(df.groupby("days")): #144 scans per day -> imgs,msks
+cnt=0
+pbar = tqdm(df.groupby("days"), total=len(df.groupby("days")), desc='Saving ')
+for day, group in pbar: #144 scans per day -> imgs,msks
     imgs,msks,file_names = [],[],[]
     for file_name in group.image_files.unique(): #1group -> "stomach" "large_bowel" "small_bowel"(3labels)
         #img = cv2.imread(file_name, cv2.IMREAD_ANYDEPTH) #(266,266) ...fluctuate xy size but size are mostly it
-        img = load_img(file_name)
+        img = load_img(file_name) #set (IMGSIZE)
         segms = group.loc[group.image_files == file_name] 
         masks = {} #3label mask
         for segm, label in zip(segms.segmentation, segms['class']): #1lebel + 1segm -> 1mask
             if not pd.isna(segm):
-                mask = rle_decode(segm,[segms.size_x.iloc[0], segms.size_y.iloc[0]])
+                mask = rle_decode(segm,[segms.size_y.iloc[0], segms.size_x.iloc[0]])
                 masks[label] = mask
             else:
-                masks[label] = np.zeros((segms.size_x.iloc[0], segms.size_y.iloc[0]), dtype = np.uint8)
-        masks = np.stack([masks[k] for k in sorted(masks)], -1)
-        imgs.append(img) #(144,266,266)
-        msks.append(masks) #(144,266,266,3)
+                masks[label] = np.zeros((segms.size_y.iloc[0], segms.size_x.iloc[0]), dtype = np.uint8)
+                
+        masks = change_shape_msk(masks,IMG_SIZE) # (inputsize) -> (IMGSIZE)     
+        imgs.append(img) #  imgs : (144,266,266)    img : (1,266,266)
+        msks.append(masks) #msks : (144,266,266,3) masks: (1,266,266,3)
     
-    print(f'{len(imgs)}, {len(imgs[0])}, {len(imgs[0][0])}')
+    #print(f'{len(imgs)}, {len(imgs[0])}, {len(imgs[0][0])}')
     imgs = np.stack(imgs, 0) #(144,266,266) ... ndarray
     #imgs = np.array(imgs)
     msks = np.stack(msks, 0) #(144,266,266,3) ...ndarray
     #msks = np.array(msks)
     
     for i in range(msks.shape[0]):
+        cnt += 1
         img = imgs[[max(0, i - 2), i, min(imgs.shape[0] - 1, i + 2)]].transpose(1,2,0)    
         msk = msks[i]
         
         new_file_name = f"{day}_slice_{str(i+1).zfill(4)}.png"
         cv2.imwrite(f"../input/seg_train/images/{new_file_name}", img)
         cv2.imwrite(f"../input/seg_train/masks/{new_file_name}", msk)
+        pbar.set_postfix(saveimg=f'{cnt}/{len(df.id)/3}')
+    

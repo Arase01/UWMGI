@@ -118,12 +118,11 @@ def train_one_epoch(model, optimizer, scheduler, dataloader, device, epoch):
     running_loss = 0.0
     
     pbar = tqdm(enumerate(dataloader), total=len(dataloader), desc='Train ')
-    for step, (images, masks) in pbar:         
+    for step, (images, masks) in pbar:
         images = images.to(device, dtype=torch.float)
         masks  = masks.to(device, dtype=torch.float)
         
         batch_size = images.size(0)
-        schelr = scheduler.get_lr()
         with amp.autocast(enabled=True):
             y_pred = model(images)
             loss   = criterion(y_pred, masks)
@@ -150,7 +149,6 @@ def train_one_epoch(model, optimizer, scheduler, dataloader, device, epoch):
         current_lr = optimizer.param_groups[0]['lr']
         pbar.set_postfix(train_loss=f'{epoch_loss:0.4f}',
                         lr=f'{current_lr:0.5f}',
-                        #schelr = f'{schelr:0.5f}',
                         gpu_mem=f'{mem:0.2f} GB')
         torch.cuda.empty_cache()
         gc.collect()
