@@ -7,13 +7,12 @@ import torchvision.transforms as transforms
 
 
 class BuildDataset(Dataset):
-    def __init__(self, df, size=(256, 256), label=True, transforms=None):
+    def __init__(self, df, label=True, transforms=None):
         #self.img_paths  = sorted(glob(f'{image_paths}/*.png'), key = lambda x: x.split('\\')[1].split('_')[1])
         #self.img_masks  = sorted(glob(f'{mask_paths}/*.png'), key = lambda x: x.split('\\')[1].split('_')[1])
         self.df = df
         self.img_paths  = df['image_path']
         self.mask_paths  = df['mask_path']
-        self.size = size
         self.label = label
         
     def __len__(self):
@@ -22,13 +21,11 @@ class BuildDataset(Dataset):
     def __getitem__(self, index):
         img_path  = self.img_paths[index]
         img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED).astype('float32')
-        img = cv2.resize(img, dsize=self.size)
         img /= img.max(axis=(0,1))
         
         if self.label:
             mask_path = self.mask_paths[index]
             mask = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED).astype('float32')
-            mask = cv2.resize(mask, dsize=self.size)
 #             if self.transforms:
 #                 data = self.transforms(image=img, mask=msk)
 #                 img  = data['image']
