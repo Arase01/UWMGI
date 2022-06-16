@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torchsummary import summary
 from torch.optim import lr_scheduler
 from torch.utils.data import Dataset, DataLoader
 from torch.cuda import amp
@@ -56,7 +57,7 @@ class CFG:
     min_lr        = 1e-6
     wd            = 1e-6
     n_fold        = 5
-    train_bs      = 64
+    train_bs      = 58
     valid_bs      = train_bs * 2
     n_accumulate  = max(1, 32//train_bs)
     T_max         = int(30000/train_bs*epochs)+50
@@ -122,6 +123,7 @@ def train_one_epoch(model, optimizer, scheduler, dataloader, device, epoch):
         images = images.to(device, dtype=torch.float)
         masks  = masks.to(device, dtype=torch.float)
         
+        #print(images.size()); print(masks.size())
         batch_size = images.size(0)
         with amp.autocast(enabled=True):
             y_pred = model(images)
@@ -298,8 +300,17 @@ def main():
         print('#'*15)
         print(f'### Fold: {fold}')
         print('#'*15)
+        
+        #-----load data, model-----
         train_loader, valid_loader = prepare_loaders(df, fold, CFG.train_bs, CFG.valid_bs)
         model = build_model()
+        
+        #-----print data-----      
+        imgs,msks = next(iter(train_loader))
+        print(f' imgsize: {imgs.size()} \n msksize: {msks.size()}')
+        #summary(model,(3,320,384)) #print model
+        
+        #-----train-----
         optimizer = optim.Adam(model.parameters(), lr=CFG.lr, weight_decay=CFG.wd)
         scheduler = lr_scheduler.CosineAnnealingLR(optimizer,T_max=CFG.T_max, eta_min=CFG.min_lr)
         model, history = run_training(model, optimizer, scheduler, #return best model and history
@@ -309,6 +320,7 @@ def main():
                                       valid_loader=valid_loader,
                                       fold=fold)
         
+        #-----plt result-----
         fig, axs = plt.subplots(2,2,figsize=(12,12))
         for f, ax in zip(history, axs.ravel()):
             ax.set_xlabel(f)

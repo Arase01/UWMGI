@@ -132,5 +132,5 @@ for day, group in pbar: #144 scans per day -> imgs,msks
         new_file_name = f"{day}_slice_{str(i+1).zfill(4)}.png"
         cv2.imwrite(f"../input/seg_train/images/{new_file_name}", img)
         cv2.imwrite(f"../input/seg_train/masks/{new_file_name}", msk)
-        pbar.set_postfix(saveimg=f'{cnt}/{len(df.id)/3}')
+        pbar.set_postfix(saveimg=f'{cnt}/{int(len(df.id)/3)}')
     
