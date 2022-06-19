@@ -89,7 +89,7 @@ JaccardLoss = smp.losses.JaccardLoss(mode='multilabel')
 DiceLoss    = smp.losses.DiceLoss(mode='multilabel')
 BCELoss     = smp.losses.SoftBCEWithLogitsLoss()
 LovaszLoss  = smp.losses.LovaszLoss(mode='multilabel', per_image=False)
-TverskyLoss = smp.losses.TverskyLoss(mode='multilabel', log_loss=False)
+TverskyLoss = smp.losses.TverskyLoss(alpha=0.3, mode='multilabel', log_loss=False)
 
 def dice_coef(y_true, y_pred, thr=0.5, dim=(2,3), epsilon=0.001):
     y_true = y_true.to(torch.float32)
@@ -123,7 +123,6 @@ def train_one_epoch(model, optimizer, scheduler, dataloader, device, epoch):
         images = images.to(device, dtype=torch.float)
         masks  = masks.to(device, dtype=torch.float)
         
-        #print(images.size()); print(masks.size())
         batch_size = images.size(0)
         with amp.autocast(enabled=True):
             y_pred = model(images)
@@ -309,6 +308,7 @@ def main():
         imgs,msks = next(iter(train_loader))
         print(f' imgsize: {imgs.size()} \n msksize: {msks.size()}')
         #summary(model,(3,320,384)) #print model
+        #sys.exit()
         
         #-----train-----
         optimizer = optim.Adam(model.parameters(), lr=CFG.lr, weight_decay=CFG.wd)
