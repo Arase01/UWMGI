@@ -92,6 +92,7 @@ LovaszLoss  = smp.losses.LovaszLoss(mode='multilabel', per_image=False)
 TverskyLoss = smp.losses.TverskyLoss(alpha=0.3, mode='multilabel', log_loss=False)
 
 def dice_coef(y_true, y_pred, thr=0.5, dim=(2,3), epsilon=0.001):
+
     y_true = y_true.to(torch.float32)
     y_pred = (y_pred>thr).to(torch.float32)
     inter = (y_true*y_pred).sum(dim=dim)
@@ -327,7 +328,7 @@ def main():
             ax.plot(history[f])
         savepath = "../output/learn" + str(fold) + ".png"
         plt.savefig(savepath)
-        
+    
 if __name__ == '__main__':
     main()
     
