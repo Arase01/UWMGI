@@ -52,7 +52,7 @@ class CFG:
     model_name    = 'Unet'
     backbone      = 'efficientnet-b0'
     num_classes   = 3
-    epochs        = 10
+    epochs        = 5
     lr            = 2e-3
     min_lr        = 1e-6
     wd            = 1e-6
