@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torchsummary import summary
 from torch.optim import lr_scheduler
 from torch.utils.data import Dataset, DataLoader
 from torch.cuda import amp
@@ -51,12 +52,12 @@ class CFG:
     model_name    = 'Unet'
     backbone      = 'efficientnet-b0'
     num_classes   = 3
-    epochs        = 10
+    epochs        = 5
     lr            = 2e-3
     min_lr        = 1e-6
     wd            = 1e-6
     n_fold        = 5
-    train_bs      = 64
+    train_bs      = 58
     valid_bs      = train_bs * 2
     n_accumulate  = max(1, 32//train_bs)
     T_max         = int(30000/train_bs*epochs)+50
@@ -88,9 +89,10 @@ JaccardLoss = smp.losses.JaccardLoss(mode='multilabel')
 DiceLoss    = smp.losses.DiceLoss(mode='multilabel')
 BCELoss     = smp.losses.SoftBCEWithLogitsLoss()
 LovaszLoss  = smp.losses.LovaszLoss(mode='multilabel', per_image=False)
-TverskyLoss = smp.losses.TverskyLoss(mode='multilabel', log_loss=False)
+TverskyLoss = smp.losses.TverskyLoss(alpha=0.3, mode='multilabel', log_loss=False)
 
 def dice_coef(y_true, y_pred, thr=0.5, dim=(2,3), epsilon=0.001):
+
     y_true = y_true.to(torch.float32)
     y_pred = (y_pred>thr).to(torch.float32)
     inter = (y_true*y_pred).sum(dim=dim)
@@ -298,8 +300,18 @@ def main():
         print('#'*15)
         print(f'### Fold: {fold}')
         print('#'*15)
+        
+        #-----load data, model-----
         train_loader, valid_loader = prepare_loaders(df, fold, CFG.train_bs, CFG.valid_bs)
         model = build_model()
+        
+        #-----print data-----      
+        imgs,msks = next(iter(train_loader))
+        print(f' imgsize: {imgs.size()} \n msksize: {msks.size()}')
+        #summary(model,(3,320,384)) #print model
+        #sys.exit()
+        
+        #-----train-----
         optimizer = optim.Adam(model.parameters(), lr=CFG.lr, weight_decay=CFG.wd)
         scheduler = lr_scheduler.CosineAnnealingLR(optimizer,T_max=CFG.T_max, eta_min=CFG.min_lr)
         model, history = run_training(model, optimizer, scheduler, #return best model and history
@@ -309,13 +321,14 @@ def main():
                                       valid_loader=valid_loader,
                                       fold=fold)
         
+        #-----plt result-----
         fig, axs = plt.subplots(2,2,figsize=(12,12))
         for f, ax in zip(history, axs.ravel()):
             ax.set_xlabel(f)
             ax.plot(history[f])
         savepath = "../output/learn" + str(fold) + ".png"
         plt.savefig(savepath)
-        
+    
 if __name__ == '__main__':
     main()
     
