@@ -50,14 +50,14 @@ class CFG:
     seed          = 101
     comment       = 'unet-efficientnet_b0-320x384'
     model_name    = 'Unet'
-    backbone      = 'efficientnet-b0'
+    backbone      = 'efficientnet-b4'
     num_classes   = 3
-    epochs        = 5
+    epochs        = 20
     lr            = 2e-3
     min_lr        = 1e-6
     wd            = 1e-6
     n_fold        = 5
-    train_bs      = 58
+    train_bs      = 32
     valid_bs      = train_bs * 2
     n_accumulate  = max(1, 32//train_bs)
     T_max         = int(30000/train_bs*epochs)+50
@@ -280,6 +280,10 @@ def main():
     
     df['rle_len'] = df2['rle_len']
     df['empty'] = df2['empty']
+    fault1 = 'case7_day0'
+    fault2 = 'case81_day30'
+    df = df[~df['id'].str.contains(fault1) & ~df['id'].str.contains(fault2)].reset_index(drop=True)
+
     df['empty'].value_counts().plot.bar()
     
     if CFG.debug:
